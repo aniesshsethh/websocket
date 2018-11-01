@@ -105,28 +105,26 @@ func (u *Upgrader) selectSubprotocol(ctx *fasthttp.RequestCtx) string {
 //
 // If the upgrade fails, then Upgrade replies to the client with an HTTP error
 // response.
-func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handlers ...func(*Conn)) error {
+
+func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx) {
 	handler := u.Handler
-	if len(handlers) > 0 {
-		handler = handlers[0]
-	}
 	if handler == nil {
 		panic("Upgrader's handler must be set.")
 	}
 
 	if !ctx.IsGet() {
-		return u.returnError(ctx, fasthttp.StatusMethodNotAllowed, "websocket: method not GET")
+		ctx.Error("websocket: method not GET", fasthttp.StatusMethodNotAllowed)
 	}
 	if !tokenListContainsValue(string(ctx.Request.Header.Peek("Sec-WebSocket-Version")), websocketVersion) {
-		return u.returnError(ctx, fasthttp.StatusBadRequest, "websocket: version != 13")
+		ctx.Error("websocket: version != 13", fasthttp.StatusBadRequest)
 	}
 
 	if !tokenListContainsValue(string(ctx.Request.Header.Peek("Connection")), "upgrade") {
-		return u.returnError(ctx, fasthttp.StatusBadRequest, "websocket: could not find connection header with token 'upgrade'")
+		ctx.Error("websocket: could not find connection header with token 'upgrade'", fasthttp.StatusBadRequest)
 	}
 
 	if !tokenListContainsValue(string(ctx.Request.Header.Peek("Upgrade")), "websocket") {
-		return u.returnError(ctx, fasthttp.StatusBadRequest, "websocket: could not find upgrade header with token 'websocket'")
+		ctx.Error("websocket: could not find upgrade header with token 'websocket'", fasthttp.StatusBadRequest)
 	}
 
 	checkOrigin := u.CheckOrigin
@@ -134,12 +132,12 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handlers ...func(*Conn)) er
 		checkOrigin = checkSameOrigin
 	}
 	if !checkOrigin(ctx) {
-		return u.returnError(ctx, fasthttp.StatusForbidden, "websocket: origin not allowed")
+		ctx.Error("websocket: origin not allowed", fasthttp.StatusForbidden)
 	}
 
 	challengeKey := ctx.Request.Header.Peek("Sec-WebSocket-Key")
 	if len(challengeKey) == 0 {
-		return u.returnError(ctx, fasthttp.StatusBadRequest, "websocket: key missing or blank")
+		ctx.Error("websocket: key missing or blank", fasthttp.StatusBadRequest)
 	}
 
 	ctx.SetStatusCode(fasthttp.StatusSwitchingProtocols)
@@ -155,8 +153,6 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handlers ...func(*Conn)) er
 		c.subprotocol = subprotocol
 		handler(c)
 	})
-
-	return nil
 }
 
 // Upgrade upgrades the HTTP server connection to the WebSocket protocol.
@@ -188,7 +184,7 @@ func (u *Upgrader) Upgrade(ctx *fasthttp.RequestCtx, handlers ...func(*Conn)) er
 // If the request is not a valid WebSocket handshake, then Upgrade returns an
 // error of type HandshakeError. Applications should handle this error by
 // replying to the client with an HTTP error response.
-func Upgrade(ctx *fasthttp.RequestCtx, readBufSize, writeBufSize int) error {
+func Upgrade(ctx *fasthttp.RequestCtx, readBufSize, writeBufSize int) {
 	u := Upgrader{ReadBufferSize: readBufSize, WriteBufferSize: writeBufSize}
 	u.Error = func(ctx *fasthttp.RequestCtx, status int, reason error) {
 		// don't return errors to maintain backwards compatibility
@@ -197,7 +193,7 @@ func Upgrade(ctx *fasthttp.RequestCtx, readBufSize, writeBufSize int) error {
 		// allow all connections by default
 		return true
 	}
-	return u.Upgrade(ctx)
+	u.Upgrade(ctx)
 }
 
 // Subprotocols returns the subprotocols requested by the client in the
